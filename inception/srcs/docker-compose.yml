@@ -1,0 +1,79 @@
+# < 서비스 정의 시작 >
+services:
+  # nginx 서비스 정의
+  nginx:
+    image: nginx # nginx 이미지 사용
+    container_name: nginx # 컨테이너 이름을 nginx로 설정
+    build: ./requirements/nginx # ./requirements/nginx 경로에 있는 Dockerfile로 이미지 빌드
+    ports:
+      - 443:443 # 호스트의 443 포트를 컨테이너의 443 포트에 연결
+    volumes:
+      - wordpress_volume:/var/www/html # wordpress_volume 볼륨을 컨테이너의 /var/www/html에 마운트
+    restart: on-failure # 컨테이너가 실패했을 때 재시작
+    networks:
+      - network # network 네트워크에 연결
+    depends_on:
+      wordpress:
+        condition: service_healthy # wordpress 서비스가 '건강한' 상태가 되면 시작
+
+  # wordpress 서비스 정의
+  wordpress:
+    image: wordpress # wordpress 이미지 사용
+    container_name: wordpress # 컨테이너 이름을 wordpress로 설정
+    build: ./requirements/wordpress # ./requirements/wordpress 경로에 있는 Dockerfile로 이미지 빌드
+    volumes:
+      - wordpress_volume:/var/www/html # wordpress_volume 볼륨을 컨테이너의 /var/www/html에 마운트
+    restart: on-failure # 컨테이너가 실패했을 때 재시작
+    networks:
+      - network # network 네트워크에 연결
+    env_file:
+      - .env # 환경 변수 파일 사용
+    depends_on:
+      mysql:
+        condition: service_healthy # mysql 서비스가 '건강한' 상태가 되면 시작
+    healthcheck:
+      test: ["CMD-SHELL", "wp core is-installed --allow-root || exit 1"] # WordPress가 정상적으로 설치되었는지 확인
+      interval: 10s # 5초마다 테스트
+      timeout: 15s # 타임아웃 시간은 3초
+      retries: 5 # 실패 시 5번 재시도
+      start_period: 30s # 처음 시작 후 10초 동안은 healthcheck를 수행하지 않음
+
+  # mysql 서비스 정의
+  mysql:
+    image: mariadb # mariadb 이미지 사용
+    container_name: mariadb # 컨테이너 이름을 mariadb로 설정
+    build: ./requirements/mariadb # ./requirements/mariadb 경로에 있는 Dockerfile로 이미지 빌드
+    volumes:
+      - mysql_volume:/var/lib/mysql # mysql_volume 볼륨을 컨테이너의 /var/lib/mysql에 마운트
+    restart: on-failure # 컨테이너가 실패했을 때 재시작
+    networks:
+      - network # network 네트워크에 연결
+    env_file:
+      - .env # 환경 변수 파일 사용
+    healthcheck:
+      test: mysqladmin ping -h localhost || exit 1 # MySQL이 정상적으로 응답하는지 확인
+      interval: 10s # 5초마다 테스트
+      timeout: 15s # 타임아웃 시간은 3초
+      retries: 5 # 실패 시 5번 재시도
+      start_period: 30s # 처음 시작 후 10초 동안은 healthcheck를 수행하지 않음
+
+# < 볼륨 정의 시작 >
+volumes:
+  wordpress_volume:
+    driver: local # 로컬 스토리지 드라이버 사용
+    driver_opts:
+      type: none
+      device: /home/dkham/data/wordpress # 호스트의 /home/dkham/data/wordpress 디렉토리를 볼륨으로 사용
+      o: bind # bind 마운트 옵션 사용
+
+  mysql_volume:
+    driver: local # 로컬 스토리지 드라이버 사용
+    driver_opts:
+      type: none
+      device: /home/dkham/data/mysql # 호스트의 /home/dkham/data/mysql 디렉토리를 볼륨으로 사용
+      o: bind # bind 마운트 옵션 사용
+
+# < 네트워크 정의 시작 >
+networks:
+  network:
+    driver: bridge # 브리지 네트워크 드라이버 사용
